@@ -465,7 +465,7 @@ class RevisionManager(object):
                 # Save a new revision.
                 revision = Revision(
                     manager_slug = self._manager_slug,
-                    user = user,
+                    user_id = user.id,
                     comment = comment,
                 )
                 # Send the pre_revision_commit signal.
