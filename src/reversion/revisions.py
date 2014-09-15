@@ -463,9 +463,13 @@ class RevisionManager(object):
             # Only save if we're always saving, or have changes.
             if save_revision:
                 # Save a new revision.
+                user_fk = user
+                if user is not None:
+                    user_fk = user.id
+
                 revision = Revision(
                     manager_slug = self._manager_slug,
-                    user_id = user.id,
+                    user_id = user_fk,
                     comment = comment,
                 )
                 # Send the pre_revision_commit signal.
