@@ -56,16 +56,10 @@ class VersionAdmin(admin.ModelAdmin):
     
     def _autoregister(self, model, follow=None):
         """Registers a model with reversion, if required."""
-        if model._meta.proxy:
-            raise RegistrationError(
-                "{model} is a proxy model, and cannot be used with django-reversion, register the parent class ({model_parent}) instead.".format(  # noqa
-                    model=model.__name__,
-                    model_parent=', '.join(
-                        [x.__name__ for x in model._meta.parents.keys()])
-                ))
         if not self.revision_manager.is_registered(model):
             follow = follow or []
-            for parent_cls, field in model._meta.parents.items():
+            # Use model_meta.concrete_model to catch proxy models
+            for parent_cls, field in model._meta.concrete_model._meta.parents.items():
                 follow.append(field.name)
                 self._autoregister(parent_cls)
             self.revision_manager.register(model, follow=follow, format=self.reversion_format)
@@ -133,7 +127,7 @@ class VersionAdmin(admin.ModelAdmin):
         urls = super(VersionAdmin, self).get_urls()
         admin_site = self.admin_site
         opts = self.model._meta
-        info = opts.app_label, opts.module_name,
+        info = opts.app_label, opts.model_name,
         reversion_urls = patterns("",
                                   url("^recover/$", admin_site.admin_view(self.recoverlist_view), name='%s_%s_recoverlist' % info),
                                   url("^recover/([^/]+)/$", admin_site.admin_view(self.recover_view), name='%s_%s_recover' % info),
@@ -193,7 +187,7 @@ class VersionAdmin(admin.ModelAdmin):
             "module_name": capfirst(opts.verbose_name),
             "title": _("Recover deleted %(name)s") % {"name": force_text(opts.verbose_name_plural)},
             "deleted": deleted,
-            "changelist_url": reverse("%s:%s_%s_changelist" % (self.admin_site.name, opts.app_label, opts.module_name)),
+            "changelist_url": reverse("%s:%s_%s_changelist" % (self.admin_site.name, opts.app_label, opts.model_name)),
         }
         extra_context = extra_context or {}
         context.update(extra_context)
@@ -292,7 +286,7 @@ class VersionAdmin(admin.ModelAdmin):
                     prefix = "%s-%s" % (prefix, prefixes[prefix])
                 formset = FormSet(request.POST, request.FILES,
                                   instance=new_object, prefix=prefix,
-                                  queryset=inline.queryset(request))
+                                  queryset=inline.get_queryset(request))
                 self._hack_inline_formset_initial(inline, FormSet, formset, obj, version, revert, recover)
                 # Add this hacked formset to the form.
                 formsets.append(formset)
@@ -332,7 +326,7 @@ class VersionAdmin(admin.ModelAdmin):
                 if prefixes[prefix] != 1:
                     prefix = "%s-%s" % (prefix, prefixes[prefix])
                 formset = FormSet(instance=obj, prefix=prefix,
-                                  queryset=inline.queryset(request))
+                                  queryset=inline.get_queryset(request))
                 self._hack_inline_formset_initial(inline, FormSet, formset, obj, version, revert, recover)
                 # Add this hacked formset to the form.
                 formsets.append(formset)
@@ -374,10 +368,10 @@ class VersionAdmin(admin.ModelAdmin):
                         "content_type_id": ContentType.objects.get_for_model(self.model).id,
                         "save_as": False,
                         "save_on_top": self.save_on_top,
-                        "changelist_url": reverse("%s:%s_%s_changelist" % (self.admin_site.name, opts.app_label, opts.module_name)),
-                        "change_url": reverse("%s:%s_%s_change" % (self.admin_site.name, opts.app_label, opts.module_name), args=(quote(obj.pk),)),
-                        "history_url": reverse("%s:%s_%s_history" % (self.admin_site.name, opts.app_label, opts.module_name), args=(quote(obj.pk),)),
-                        "recoverlist_url": reverse("%s:%s_%s_recoverlist" % (self.admin_site.name, opts.app_label, opts.module_name))})
+                        "changelist_url": reverse("%s:%s_%s_changelist" % (self.admin_site.name, opts.app_label, opts.model_name)),
+                        "change_url": reverse("%s:%s_%s_change" % (self.admin_site.name, opts.app_label, opts.model_name), args=(quote(obj.pk),)),
+                        "history_url": reverse("%s:%s_%s_history" % (self.admin_site.name, opts.app_label, opts.model_name), args=(quote(obj.pk),)),
+                        "recoverlist_url": reverse("%s:%s_%s_recoverlist" % (self.admin_site.name, opts.app_label, opts.model_name))})
         # Render the form.
         if revert:
             form_template = self.revision_form_template or self._get_template_list("revision_form.html")
@@ -416,8 +410,8 @@ class VersionAdmin(admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
         """Renders the change view."""
         opts = self.model._meta
-        context = {"recoverlist_url": reverse("%s:%s_%s_recoverlist" % (self.admin_site.name, opts.app_label, opts.module_name)),
-                   "add_url": reverse("%s:%s_%s_add" % (self.admin_site.name, opts.app_label, opts.module_name)),}
+        context = {"recoverlist_url": reverse("%s:%s_%s_recoverlist" % (self.admin_site.name, opts.app_label, opts.model_name)),
+                   "add_url": reverse("%s:%s_%s_add" % (self.admin_site.name, opts.app_label, opts.model_name)),}
         context.update(extra_context or {})
         return super(VersionAdmin, self).changelist_view(request, context)
     
@@ -431,7 +425,7 @@ class VersionAdmin(admin.ModelAdmin):
         action_list = [
             {
                 "revision": version.revision,
-                "url": reverse("%s:%s_%s_revision" % (self.admin_site.name, opts.app_label, opts.module_name), args=(quote(version.object_id), version.id)),
+                "url": reverse("%s:%s_%s_revision" % (self.admin_site.name, opts.app_label, opts.model_name), args=(quote(version.object_id), version.id)),
             }
             for version
             in self._order_version_queryset(self.revision_manager.get_for_object_reference(

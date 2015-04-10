@@ -46,7 +46,7 @@ class Revision(models.Model):
     """A group of related object versions."""
 
     manager_slug = models.CharField(
-        max_length = 200,
+        max_length = 191,
         db_index = True,
         default = "default",
     )
@@ -92,6 +92,10 @@ class Revision(models.Model):
     def __str__(self):
         """Returns a unicode representation."""
         return ", ".join(force_text(version) for version in self.version_set.all())
+
+    #Meta
+    class Meta:
+        app_label = 'reversion'
 
 
 def has_int_pk(model):
@@ -160,7 +164,9 @@ class Version(models.Model):
                 result[field.name] = field.value_from_object(obj)
             result.update(object_version.m2m_data)
             # Add parent data.
-            for parent_class, field in obj._meta.parents.items():
+            for parent_class, field in obj._meta.concrete_model._meta.parents.items():
+                if obj._meta.proxy and parent_class == obj._meta.concrete_model:
+                    continue
                 content_type = ContentType.objects.get_for_model(parent_class)
                 if field:
                     parent_id = force_text(getattr(obj, field.attname))
@@ -184,6 +190,10 @@ class Version(models.Model):
     def __str__(self):
         """Returns a unicode representation."""
         return self.object_repr
+
+    #Meta
+    class Meta:
+        app_label = 'reversion'
 
 
 # Version management signals.
